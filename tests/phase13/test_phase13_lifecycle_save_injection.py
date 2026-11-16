@@ -164,7 +164,7 @@ def _facade(document: _Document | None, *additional_documents: _Document):
     )
     return SimpleNamespace(
         _execution_collaborators=SimpleNamespace(freecad=freecad),
-        _dispatch_gui=lambda callback: callback(),
+        _dispatch_gui=lambda callback, **_kwargs: callback(),
     )
 
 
@@ -633,7 +633,7 @@ def test_resolution_and_save_run_only_inside_gui_dispatch() -> None:
         listDocuments=lambda: assert_dispatched({document.Name: document}),
     )
 
-    def dispatch(callback):
+    def dispatch(callback, **_kwargs):
         state["inside_dispatch"] = True
         try:
             return callback()

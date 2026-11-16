@@ -16,6 +16,10 @@ from typing import Any
 
 from .cad_methods_ops.mutation_readiness import document_readiness
 
+# Native serialization and durability checks can exceed the general GUI budget.
+# Keep this bounded below the MCP client transport timeout (150 seconds).
+_SAVE_GUI_TIMEOUT_SECONDS = 120.0
+
 
 def _error(code: str, message: str) -> dict[str, Any]:
     return {"success": False, "error_code": code, "error": message}
@@ -688,7 +692,10 @@ def save_document(self, selector, validation_profile="default"):
     selector_failure = _selector_error(selector)
     if selector_failure is not None:
         return selector_failure
-    result = self._dispatch_gui(lambda: _resolve_and_save_gui(self, selector))
+    result = self._dispatch_gui(
+        lambda: _resolve_and_save_gui(self, selector),
+        timeout=_SAVE_GUI_TIMEOUT_SECONDS,
+    )
     return result if isinstance(result, dict) else _error("NATIVE_SAVE_FAILED", str(result))
 
 
@@ -715,7 +722,8 @@ def save_document_as(
             destination,
             overwrite,
             expected_destination_sha256,
-        )
+        ),
+        timeout=_SAVE_GUI_TIMEOUT_SECONDS,
     )
     return result if isinstance(result, dict) else _error("NATIVE_SAVE_FAILED", str(result))
 
@@ -741,7 +749,8 @@ def save_document_copy(
             selector,
             destination,
             overwrite,
-        )
+        ),
+        timeout=_SAVE_GUI_TIMEOUT_SECONDS,
     )
     return result if isinstance(result, dict) else _error("NATIVE_SAVE_FAILED", str(result))
 
