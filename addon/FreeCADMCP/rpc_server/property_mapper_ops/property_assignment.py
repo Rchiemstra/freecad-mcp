@@ -97,11 +97,11 @@ def assign_view_property(
         setattr(obj.ViewObject, prop, to_shape_color(val))
         return True
     if prop == "ViewObject" and isinstance(val, dict):
+        view = obj.ViewObject
         for key, item in val.items():
-            if key == "ShapeColor":
-                setattr(obj.ViewObject, key, to_shape_color(item))
-            else:
-                setattr(obj.ViewObject, key, item)
+            if key == "ShapeColor" or _property_type(view, key) == "App::PropertyColor":
+                item = to_shape_color(item)
+            setattr(view, key, item)
         return True
     return False
 
